@@ -31,6 +31,9 @@ spec:
         image: iwantm/qaeventtrack:tagname
         env:
         - name: DATABASE_URI_PROJECT 
-          value: "mysql+pymysql://root:pass@mysql:3306/dbb"
+          valueFrom:
+            secretKeyRef:
+              name: db-uri
+              key: uri
         ports:
         - containerPort: 5000

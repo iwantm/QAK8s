@@ -9,7 +9,6 @@ spec:
   - protocol: TCP
     port: 5003
     targetPort: 5003
-  type: LoadBalancer
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -31,6 +30,9 @@ spec:
         image: iwantm/rng:service4
         env:
         - name: API_CODE
-          value: "iw455756477"
+          valueFrom:
+            secretKeyRef:
+              name: btn-api-code
+              key: api-code
         ports:
         - containerPort: 5003

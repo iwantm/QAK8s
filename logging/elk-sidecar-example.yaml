@@ -1,0 +1,135 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: fluentd-config
+data:
+  fluent.conf: |
+    <source>
+      @type tail
+      path /tmp/logs/log.txt
+      pos_file /tmp/logs/log.txt.pos
+      tag application.logs
+      <parse>
+        @type none
+      </parse>
+    </source>
+    <match *.*>
+      @type elasticsearch
+      host elasticsearch
+      port 9200
+      logstash_format true
+    </match>
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: jenkins
+  labels:
+    app: jenkins
+spec:
+  volumes:
+  - name: logs
+    emptyDir: {}
+  - name: fluentd-config
+    configMap:
+      name: fluentd-config
+  containers:
+  - name: busybox
+    image: busybox
+    command:
+    - '/bin/sh'
+    args: ["-c", "while true; do date 2>&1 | tee -a /tmp/logs/log.txt; sleep 10; done"]
+    volumeMounts:
+    - name: logs
+      mountPath: /tmp/logs
+  - name: fluentd
+    image: bobcrutchley/fluentd-elasticsearch
+    volumeMounts:
+    - name: logs
+      mountPath: /tmp/logs
+    - name: fluentd-config
+      mountPath: /fluentd/etc/
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch
+spec:
+  selector:
+    matchLabels:
+      component: elasticsearch
+  template:
+    metadata:
+      labels:
+        component: elasticsearch
+    spec:
+      containers:
+      - name: elasticsearch
+        image: docker.elastic.co/elasticsearch/elasticsearch:6.5.4
+        env:
+        - name: discovery.type
+          value: single-node
+        ports:
+        - containerPort: 9200
+          name: http
+          protocol: TCP
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: 200m
+            memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch
+  labels:
+    service: elasticsearch
+spec:
+  type: ClusterIP
+  selector:
+    component: elasticsearch
+  ports:
+  - port: 9200
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+spec:
+  selector:
+    matchLabels:
+      run: kibana
+  template:
+    metadata:
+      labels:
+        run: kibana
+    spec:
+      containers:
+      - name: kibana
+        image: docker.elastic.co/kibana/kibana:6.5.4
+        env:
+        - name: ELASTICSEARCH_URL
+          value: http://elasticsearch:9200
+        - name: XPACK_SECURITY_ENABLED
+          value: "true"
+        ports:
+        - containerPort: 5601
+          name: http
+          protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  labels:
+    service: kibana
+spec:
+  type: LoadBalancer
+  selector:
+    run: kibana
+  ports:
+  - port: 5601
+    targetPort: 5601
